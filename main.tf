@@ -114,8 +114,8 @@ resource "aws_route_table_association" "private_rt_az1" {
 }
 
 resource "aws_route_table_association" "private_rt_az2" {
-    subnet_id = aws_subnet.private_az2.id
-    route_table_id = aws_route_table.private.id
+  subnet_id = aws_subnet.private_az2.id
+  route_table_id = aws_route_table.private.id
 }
 
 # Application Load Balancer
@@ -129,13 +129,13 @@ resource "aws_lb" "my_alb" {
 
     # Create ALB Listener
 resource "aws_alb_listener" "my_alb_listener" {
-    load_balancer_arn = aws_lb.my_alb.arn
-    port = 80
-    protocol = "HTTP"
-    default_action {
-        type = "forward"
-        target_group_arn = aws_lb_target_group.my_target_group.arn
-    }
+  load_balancer_arn = aws_lb.my_alb.arn
+  port = 80
+  protocol = "HTTP"
+  default_action {
+      type = "forward"
+      target_group_arn = aws_lb_target_group.my_target_group.arn
+  }
 }
 
     # Create ALB Target Group
@@ -148,17 +148,17 @@ resource "aws_alb_target_group" "my_target_group" {
 
     # Create ALB Listener Rule
 resource "aws_alb_listener_rule" "my_alb_listener_rule" {
-    listener_arn = aws_alb_listener.my_alb_listener.arn
-    priority = 1
-    action {
-        type = "forward"
-        target_group_arn = aws_alb_target_group.my_target_group.arn
-    }
-    condition {
-        path_pattern {
-            values = ["/"]
-        }
-    }
+  listener_arn = aws_alb_listener.my_alb_listener.arn
+  priority = 1
+  action {
+      type = "forward"
+      target_group_arn = aws_alb_target_group.my_target_group.arn
+  }
+  condition {
+      path_pattern {
+          values = ["/"]
+      }
+  }
 }
 
 # Security Groups
@@ -178,45 +178,94 @@ resource "aws_security_group" "alb_sg" {
 
     # Security Group for private instances
 resource "aws_security_group" "private_sg_az1" {
-    vpc_id = aws_vpc.main.id
-    name = "private-sg-az1"
-    description = "Security group for private subnet in AZ1"
-    ingress {
-        from_port = 22
-        to_port = 22
-        protocol = "tcp"
-        cidr_blocks = ["192.168.3.0/24"]
-    }
-    ingress {
-        from_port = 80
-        to_port = 80
-        protocol = "tcp"
-        cidr_blocks = ["192.168.3.0/24"]
-    }
-    egress {
-        from_port = 0
-        to_port = 0
-        protocol = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
+  vpc_id = aws_vpc.main.id
+  name = "private-sg-az1"
+  description = "Security group for private subnet in AZ1"
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "tcp"
+      cidr_blocks = ["192.168.3.0/24"]
+  }
+  ingress {
+      from_port = 80
+      to_port = 80
+      protocol = "tcp"
+      cidr_blocks = ["192.168.3.0/24"]
+  }
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
 }
     
     # Security Group for public instances
 resource "aws_security_group" "public_sg_az1" {
-    name = "public-sg-az1"
-    description = "Security group for public subnet in AZ1"
-    vpc_id = aws_vpc.main.id
-    ingress {
-        from_port = 22
-        to_port = 22
-        protocol = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
-    egress {
-        from_port = 0
-        to_port = 0
-        protocol = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
+  name = "public-sg-az1"
+  description = "Security group for public subnet in AZ1"
+  vpc_id = aws_vpc.main.id
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
+# AWS EC2 Instances
+    # Multi-Zone Private EC2 Instance
+data "aws_ami" "" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "amzn2-ami-hvm-*-x86_64-gp2"
+    values = ["available"]
+  }
+}
+
+resource "aws_launch_configuration" "private_instances" {
+  name_prefix = "private-launch-configuration"
+  image_id = data.aws_ami.jump_server.id
+  instance_type = "t2.micro"
+  security_groups = [aws_security_group.private_sg_az1.id, aws_security_group.private_sg_az2.id]
+  key_name = "instance-key-pair"
+}
+
+resource "aws_autoscaling_group" "name" {
+  name = "private-autoscaling-group"
+  max_size = 2
+  min_size = 2
+  desired_capacity = 2
+  vpc_zone_identifier = [aws_subnet.private_az1.id, aws_subnet.private_az2.id]
+  launch_configuration = aws_launch_configuration.private_instances.id
+  availability_zones = ["us-east-1a", "us-east-1b"]
+  target_group_arns = [aws_alb_target_group.my_target_group.arn]
+  health_check_type = "ELB"
+  health_check_grace_period = 300
+  tag {
+    key = "Name"
+    value = "private-instance"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_instance" "jump_server" {
+  ami = data.aws_ami.jump_server.id
+ instance_type = "t2.micro"
+ subnet_id = aws_subnet.public_az1.id
+ vpc_security_group_ids = [aws_security_group.public_sg_az1.id]
+ key_name = "jump-server-key"
+
+ tags = {
+   Name = "jump-server"
+ }
+}
