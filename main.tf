@@ -238,6 +238,8 @@ resource "aws_launch_configuration" "private_instances" {
   instance_type = "t2.micro"
   security_groups = [aws_security_group.private_sg_az1.id, aws_security_group.private_sg_az2.id]
   key_name = "instance-key-pair"
+  iam_instance_profile = aws_iam_instance_profile.asg_s3_profile.name
+
 }
 
 resource "aws_autoscaling_group" "name" {
@@ -269,3 +271,61 @@ resource "aws_instance" "jump_server" {
    Name = "jump-server"
  }
 }
+
+# Create an S3 bucket
+resource "aws_s3_bucket" "my_bucket"{
+  bucket = "my-bucket"
+  acl= "private"
+  tags = {
+    Name = "my-bucket"
+    Environment = "dev"
+  }
+}
+
+
+# Create an S3 bucket policy for full access
+resource "aws_s3_bucket_policy" "my_bucket_policy" {
+  bucket = aws_s3_bucket.my_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid = "AllowFullAccess",
+        Effect = "Allow",
+        Principal = {
+          AWS = aws_iam_role.asg_s3_role.arn
+        },
+        Action = "s3:*",
+        Resource = [
+          "${aws_s3_bucket.my_bucket.arn}",
+          "${aws_s3_bucket.my_bucket.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Create an IAM role for the ASG
+resource "aws_iam_role" "asg_role" {
+  name = "asg-role"
+  assume_role_policy = jsondecode({
+  "Version": "2012-10-17",
+  "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "ec2.amazonaws.com"
+        },
+        "Action": "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# Create an IAM instance profile for the ASG
+resource "aws_iam_instance_profile" "asg_s3_profile" {
+  name = "asg-s3-profile"
+  role = aws_iam_role.asg_s3_role.name
+}
+
