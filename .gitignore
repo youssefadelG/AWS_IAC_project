@@ -1,2 +1,7 @@
 .terraform/
-
+my-key
+my-key.pub
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
