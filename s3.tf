@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "web_bucket" {
-  bucket        = "joecloudkodeweb-bucket"
+  bucket        = "joecloudkodeweb-bucket-1"
   force_destroy = true
   tags = {
     Name = "CloudkodeS3BucketofJoe"

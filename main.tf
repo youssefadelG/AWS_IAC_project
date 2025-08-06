@@ -111,19 +111,8 @@ resource "aws_lb" "alb" {
   name               = "application-load-balancer"
   internal           = false
   load_balancer_type = "application"
-  subnets            = [aws_subnet.private-sub1.id, aws_subnet.private-sub2.id]
-}
-
-# Create ALB Listener
-resource "aws_lb_listener" "alb-listener" {
-  load_balancer_arn = aws_lb.alb.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.targetgroup.arn
-  }
+  security_groups    = [aws_security_group.HTTP-SSH-SG.id]
+  subnets            = [aws_subnet.public-sub1.id, aws_subnet.public-sub2.id]
 }
 
 # Create ALB Target Group
@@ -142,6 +131,19 @@ resource "aws_lb_target_group" "targetgroup" {
     unhealthy_threshold = 2
   }
 }
+
+# Create ALB Listener
+resource "aws_lb_listener" "alb-listener" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.targetgroup.arn
+  }
+}
+
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.vpc.id
   tags = {
